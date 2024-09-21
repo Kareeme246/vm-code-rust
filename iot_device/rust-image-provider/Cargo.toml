@@ -1,0 +1,12 @@
+[package]
+name = "rust-image-provider"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fastrand = "2.1.1"
+protobuf = "3.5.1"
+rdkafka = "0.36.2"
+
+[build-dependencies]
+protobuf-codegen = "3.5.1"
