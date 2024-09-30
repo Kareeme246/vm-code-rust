@@ -1,7 +1,9 @@
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
+
 message Image {
-    string timestamp = 1;
+    google.protobuf.Timestamp timestamp = 1;  // Use the Timestamp type
     bytes label = 2;
     bytes image_data = 3;
 }

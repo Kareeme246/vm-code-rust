@@ -1,4 +1,5 @@
 mod protos;
+use protobuf::well_known_types::timestamp::Timestamp;
 use protobuf::Message;
 use protos::image::Image;
 use rdkafka::producer::{BaseProducer, BaseRecord, Producer};
@@ -41,10 +42,7 @@ fn create_image_data(label: u8, image_data: Vec<u8>) -> protobuf::Result<Vec<u8>
     // Create a new instance of the `Image` struct
     let mut image_proto = Image::new();
 
-    // Set the timestamp (direct assignment or mut reference)
-    let timestamp = "2024-01-01 00:00:00".to_string(); // Replace with Unix timestamp when done testing
-
-    image_proto.timestamp = timestamp;
+    image_proto.timestamp = protobuf::MessageField::some(Timestamp::now());
     image_proto.label = vec![label];
     image_proto.image_data = image_data;
 
@@ -63,11 +61,12 @@ fn decode_image_data(encoded_data: &[u8]) -> protobuf::Result<Image> {
 
 // https://www.arroyo.dev/blog/using-kafka-with-rust#what-is-kafka
 fn create_producer(bootstrap_server: &str) -> BaseProducer {
-    ClientConfig::new()
+    let producer: BaseProducer = ClientConfig::new()
         .set("bootstrap.servers", bootstrap_server)
         .set("queue.buffering.max.ms", "0")
         .create()
-        .expect("Failed to create client")
+        .expect("Failed to create client");
+    producer
 }
 
 fn main() -> io::Result<()> {
@@ -76,19 +75,12 @@ fn main() -> io::Result<()> {
     let data = load_cifar_datafile(file_path)?;
 
     // Creates a producer, reading the bootstrap server from the first command-line argument or defaulting to localhost:9092
-    let producer = create_producer(
-        &args()
-            .skip(1)
-            .next()
-            .unwrap_or("localhost:9092".to_string()),
-    );
+    let producer = create_producer(&args().nth(1).unwrap_or("localhost:9092".to_string()));
 
     fastrand::seed(1);
     let mut available_indices: Vec<usize> = (0..NUM_IMAGES).collect(); // Initialize with all indices
 
     // Main loop: select random images, process them
-    // Add kafka processing here (rust-kafka)
-    // (Maybe protobuf goes here too? IDK
     for _ in 0..5 {
         if available_indices.is_empty() {
             // Chosen 10,000 elements
@@ -112,7 +104,7 @@ fn main() -> io::Result<()> {
                 // Send to kafka broker // Send under topic "quickstart-events"
                 // Create a record with the topic and payload
                 // let record = BaseRecord::<(), _>::to("quickstart-events").payload(&encoded_data);
-                let record = BaseRecord::<(), _>::to("quickstart-events").payload(&encoded_data);
+                let record = BaseRecord::<(), _>::to("image_initial").payload(&encoded_data);
 
                 // Send the record
                 match producer.send(record) {
@@ -122,23 +114,23 @@ fn main() -> io::Result<()> {
 
                 // Ensure all messages are sent before exiting
                 let _ = producer.flush(std::time::Duration::from_secs(1));
-                sleep(std::time::Duration::from_secs(1));
+                sleep(std::time::Duration::from_millis(100));
 
                 // Access the decoded fields for logging
-                // match decode_image_data(&encoded_data) {
-                //     Ok(decoded_image) => {
-                //         println!("Decoded timestamp: {}", decoded_image.timestamp);
-                //         println!("Decoded label: {:?}", decoded_image.label);
-                //         println!(
-                //             "Decoded image data (first 10 bytes): {:?}",
-                //             &decoded_image.image_data[..10]
-                //         );
-                //         println!();
-                //     }
-                //     Err(e) => {
-                //         eprintln!("Failed to decode image data: {:?}", e);
-                //     }
-                // }
+                match decode_image_data(&encoded_data) {
+                    Ok(decoded_image) => {
+                        println!("Decoded timestamp: {:?}", decoded_image.timestamp);
+                        println!("Decoded label: {:?}", decoded_image.label);
+                        println!(
+                            "Decoded image data (first 10 bytes): {:?}",
+                            &decoded_image.image_data[..10]
+                        );
+                        println!();
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to decode image data: {:?}", e);
+                    }
+                }
             }
             Err(e) => {
                 eprintln!("Failed to encode image data: {:?}", e);
