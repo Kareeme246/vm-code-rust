@@ -1,5 +1,7 @@
 # Dataset
 data/
+kafka_broker/kafka_2.13-3.8.0/logs/
+database/rust-database-consumer/rust_images.db
 
 # Reference python files
 *.py
