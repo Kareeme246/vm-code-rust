@@ -1,0 +1,12 @@
+[package]
+name = "rust-database-consumer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+protobuf = "3.5.1"
+rdkafka = "0.36.2"
+rusqlite = "0.32.1"
+
+[build-dependencies]
+protobuf-codegen = "3.5.1"
