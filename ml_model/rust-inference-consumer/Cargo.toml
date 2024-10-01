@@ -1,0 +1,13 @@
+[package]
+name = "rust-inference-consumer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tch = "0.17.0"
+protobuf = "3.5.1"
+rdkafka = "0.36.2"
+image = "0.25.2"
+
+[build-dependencies]
+protobuf-codegen = "3.5.1"

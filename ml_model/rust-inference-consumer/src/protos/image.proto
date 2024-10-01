@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+message Image {
+    google.protobuf.Timestamp timestamp = 1;
+    bytes original_label = 2;
+    bytes inferred_label = 3;
+    bytes image_data = 4;
+}
