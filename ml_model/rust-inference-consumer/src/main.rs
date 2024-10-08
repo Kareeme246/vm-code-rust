@@ -1,35 +1,38 @@
 mod protos;
 use protobuf::Message;
 use protos::image::Image;
+use rdkafka::message::Message as KafkaMessage;
+use rdkafka::producer::Producer;
 use rdkafka::{
     consumer::{BaseConsumer, Consumer},
     producer::{BaseProducer, BaseRecord},
-    ClientConfig
+    ClientConfig,
 };
-use rdkafka::message::Message as KafkaMessage;
-use tch::{CModule, Tensor};
+use tch::{CModule, Kind, Tensor};
 
 // Preprocess the image data received into a Tensor
 fn preprocess_image(image_data: Vec<u8>) -> Tensor {
-    let img_data: Vec<f32> = image_data
-        .chunks(3)
-        .flat_map(|p| {
-            vec![
-                p[0] as f32 / 255.0,
-                p[1] as f32 / 255.0,
-                p[2] as f32 / 255.0,
-            ]
-        })
-        .collect();
+    // Convert the image data to a tensor and normalize it
+    let img_tensor = Tensor::from_slice(&image_data)
+        .to_kind(tch::Kind::Float)
+        .divide_scalar_(255.0)
+        .view([3, 32, 32]); // CIFAR images are 32x32 with 3 color channels
 
-    Tensor::from_slice(&img_data).view([1, 3, 32, 32])
+    // Normalize using CIFAR-100 mean and std
+    let mean = Tensor::from_slice(&[0.5071, 0.4867, 0.4408])
+        .to_kind(Kind::Float)
+        .view([3, 1, 1]);
+    let std = Tensor::from_slice(&[0.2675, 0.2565, 0.2761])
+        .to_kind(Kind::Float)
+        .view([3, 1, 1]);
+
+    let normalized_tensor = (img_tensor - &mean) / &std;
+
+    normalized_tensor.unsqueeze(0) // Shape: [1, 3, 32, 32]
 }
 
 // Function to create the Protobuf message with inferred label
-fn create_inferred_image(
-    original_image: Image,
-    inferred_label: u8,
-) -> protobuf::Result<Vec<u8>> {
+fn create_inferred_image(original_image: Image, inferred_label: u8) -> protobuf::Result<Vec<u8>> {
     let mut image_proto = Image::new();
 
     // Copy the timestamp, original label, and image data from the received image
@@ -54,7 +57,7 @@ fn create_consumer(bootstrap_server: &str, group_id: &str, topic: &str) -> BaseC
     let consumer: BaseConsumer = ClientConfig::new()
         .set("group.id", group_id)
         .set("bootstrap.servers", bootstrap_server)
-        .set("auto.offset.reset", "earliest")
+        .set("auto.offset.reset", "latest")
         .create()
         .expect("Failed to create consumer");
 
@@ -74,13 +77,26 @@ fn create_producer(bootstrap_server: &str) -> BaseProducer {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load the TorchScript model
-    let model = CModule::load("cifar100_model.pt")?;
+    // Load the TorchScript model // Retry on error
+    let model = loop {
+        match CModule::load("cifar100_model.pt") {
+            Ok(m) => {
+                println!("Model loaded successfully.");
+                break m;
+            }
+            Err(e) => {
+                eprintln!("Failed to load model: {:?}. Retrying in 5 seconds...", e);
+                std::thread::sleep(std::time::Duration::from_secs(3));
+            }
+        }
+    };
 
     // Create Kafka consumer and producer
-    let bootstrap_server = &std::env::args().nth(1).unwrap_or("localhost:9092".to_string());
-    let image_initial_consumer = create_consumer(bootstrap_server, "group1", "image_initial");
-    let producer = create_producer(bootstrap_server);
+    let bootstrap_server = &std::env::args()
+        .nth(1)
+        .unwrap_or("localhost:9092".to_string());
+    let image_initial_consumer = create_consumer(bootstrap_server, "ml_group", "image_initial");
+    let inference_producer = create_producer(bootstrap_server);
 
     // Main loop for Kafka consumer
     loop {
@@ -92,8 +108,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             // Preprocess the image from the received payload
                             let input_tensor = preprocess_image(decoded_image.image_data.clone());
 
-                            // Run inference on the model
-                            let output = model.forward_ts(&[input_tensor])?;
+                            // Run inference on the model // Retry on error
+                            let output = loop {
+                                match model.forward_ts(&[input_tensor.shallow_clone()]) {
+                                    Ok(out) => break out,
+                                    Err(e) => {
+                                        eprintln!("Error during model inference: {:?}. Retrying in 1 second...", e);
+                                        std::thread::sleep(std::time::Duration::from_secs(1));
+                                    }
+                                }
+                            };
                             let predicted_class = output.argmax(1, false);
                             let predicted_label = predicted_class.int64_value(&[0]) as u8;
 
@@ -105,10 +129,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         .payload(&encoded_message)
                                         .key("inference");
 
-                                    match producer.send(record) {
+                                    match inference_producer.send(record) {
                                         Ok(_) => println!("Inferred message sent successfully."),
-                                        Err(e) => eprintln!("Failed to send inferred message: {:?}", e),
+                                        Err(e) => {
+                                            eprintln!("Failed to send inferred message: {:?}", e)
+                                        }
                                     }
+
+                                    // Ensure all messages are sent before exiting
+                                    let _ =
+                                        inference_producer.flush(std::time::Duration::from_secs(1));
+                                    std::thread::sleep(std::time::Duration::from_millis(100));
                                 }
                                 Err(e) => eprintln!("Failed to create inferred image: {:?}", e),
                             }
@@ -124,5 +155,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Pause briefly before the next poll cycle
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
-
 }
