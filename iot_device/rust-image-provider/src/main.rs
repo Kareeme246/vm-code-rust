@@ -10,10 +10,9 @@ use std::io::{self, Read};
 use std::thread::sleep;
 
 // Constants for CIFAR-100
-const IMAGE_SIZE: usize = 3072; // 32x32 image with 3 channels (RGB)
-const RECORD_SIZE: usize = 3073; // 1 byte for label + 3072 bytes for image
-const NUM_IMAGES: usize = 10_000; // 10,000 images per binary file
-const TOTAL_IMAGES: usize = 60_000; // 10,000 images per binary file * 5 train and 1 test file
+// const IMAGE_SIZE: usize = 3072; // 32x32 image with 3 channels (RGB)
+const RECORD_SIZE: usize = 3074; // 1 byte for coarse label + 1 byte for fine label + 3072 bytes for image
+const NUM_IMAGES: usize = 50_000; // 50,000 images in binary training file
 
 // Function to load the CIFAR-100 binary file
 fn load_cifar_datafile(file_path: &str) -> io::Result<Vec<u8>> {
@@ -31,10 +30,13 @@ fn get_random_image(data: &[u8], available_indices: &[usize]) -> (usize, u8, Vec
 
     // Calculate the starting position of the record
     let start: usize = random_index * RECORD_SIZE;
-    let label: u8 = data[start]; // The label is the first byte
-    let image_data = data[start + 1..start + RECORD_SIZE].to_vec(); // The next 3072 bytes are the image
 
-    (removal_index, label, image_data)
+    let coarse_label: u8 = data[start]; // Coarse label (0-19)
+    let fine_label: u8 = data[start + 1]; // Fine label (0-99)
+
+    let image_data = data[start + 2..start + RECORD_SIZE].to_vec(); // The next 3072 bytes are the image
+
+    (removal_index, fine_label, image_data)
 }
 
 // Assuming the generated struct is available
@@ -43,7 +45,7 @@ fn create_image_data(label: u8, image_data: Vec<u8>) -> protobuf::Result<Vec<u8>
     let mut image_proto = Image::new();
 
     image_proto.timestamp = protobuf::MessageField::some(Timestamp::now());
-    image_proto.label = vec![label];
+    image_proto.original_label = vec![label];
     image_proto.image_data = image_data;
 
     // Serialize the data to binary format (protobuf wire format)
@@ -71,7 +73,7 @@ fn create_producer(bootstrap_server: &str) -> BaseProducer {
 
 fn main() -> io::Result<()> {
     // Load the CIFAR-100 binary file
-    let file_path = "data/cifar-10-batches-bin/data_batch_1.bin"; // Change this based on the batch you're loading
+    let file_path = "data/cifar-100-binary/train.bin";
     let data = load_cifar_datafile(file_path)?;
 
     // Creates a producer, reading the bootstrap server from the first command-line argument or defaulting to localhost:9092
@@ -81,7 +83,7 @@ fn main() -> io::Result<()> {
     let mut available_indices: Vec<usize> = (0..NUM_IMAGES).collect(); // Initialize with all indices
 
     // Main loop: select random images, process them
-    for _ in 0..5 {
+    for _ in 0..10 {
         if available_indices.is_empty() {
             // Chosen 10,000 elements
             available_indices = (0..NUM_IMAGES).collect(); // Initialize with all indices again for
@@ -117,20 +119,20 @@ fn main() -> io::Result<()> {
                 sleep(std::time::Duration::from_millis(100));
 
                 // Access the decoded fields for logging
-                match decode_image_data(&encoded_data) {
-                    Ok(decoded_image) => {
-                        println!("Decoded timestamp: {:?}", decoded_image.timestamp);
-                        println!("Decoded label: {:?}", decoded_image.label);
-                        println!(
-                            "Decoded image data (first 10 bytes): {:?}",
-                            &decoded_image.image_data[..10]
-                        );
-                        println!();
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to decode image data: {:?}", e);
-                    }
-                }
+                // match decode_image_data(&encoded_data) {
+                //     Ok(decoded_image) => {
+                //         println!("Decoded timestamp: {:?}", decoded_image.timestamp);
+                //         println!("Decoded label: {:?}", decoded_image.original_label);
+                //         println!(
+                //             "Decoded image data (first 10 bytes): {:?}",
+                //             &decoded_image.image_data[..10]
+                //         );
+                //         println!();
+                //     }
+                //     Err(e) => {
+                //         eprintln!("Failed to decode image data: {:?}", e);
+                //     }
+                // }
             }
             Err(e) => {
                 eprintln!("Failed to encode image data: {:?}", e);
