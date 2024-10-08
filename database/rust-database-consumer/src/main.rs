@@ -7,13 +7,13 @@ use rdkafka::message::Message as KafkaMessage;
 use rdkafka::ClientConfig;
 use rusqlite::{params, Connection, Result};
 use std::env::args;
-use std::thread::sleep;
 use std::time::Duration;
 
 fn create_consumer(bootstrap_server: &str, group_id: &str, topic: &str) -> BaseConsumer {
     let consumer: BaseConsumer = ClientConfig::new()
         .set("group.id", group_id)
         .set("bootstrap.servers", bootstrap_server)
+        .set("auto.offset.reset", "latest")
         .create()
         .expect("Failed to create consumer");
 
@@ -78,10 +78,9 @@ fn insert_inferred_label(
 fn main() {
     // Create Kafka consumers for both topics
     let bootstrap_server = &args().nth(1).unwrap_or("localhost:9092".to_string());
-    let image_initial_consumer = create_consumer(bootstrap_server, "group1", "image_initial");
-    let image_inference_consumer = create_consumer(bootstrap_server, "group2", "image_inference");
+    let image_initial_consumer = create_consumer(bootstrap_server, "db_group", "image_initial");
+    let image_inference_consumer = create_consumer(bootstrap_server, "db_group", "image_inference");
 
-    // Connect to local SQLite database or create if doesn't exist
     match connect_to_database() {
         Ok(conn) => {
             // Main loop: poll both consumers and insert data into the database on payload received
@@ -96,7 +95,7 @@ fn main() {
                                     match insert_initial_image_data(
                                         &conn,
                                         &decoded_image.timestamp,
-                                        &decoded_image.label[0],
+                                        &decoded_image.original_label[0],
                                         decoded_image.image_data,
                                     ) {
                                         Ok(_) => println!("Initial image data inserted."),
@@ -119,11 +118,12 @@ fn main() {
                         if let Some(payload) = message.payload() {
                             match decode_image_data(payload) {
                                 Ok(decoded_image) => {
-                                    let timestamp = &decoded_image.timestamp;
-                                    let inferred_label = &decoded_image.label[0];
-
                                     // Insert the inferred label into the database
-                                    match insert_inferred_label(&conn, timestamp, inferred_label) {
+                                    match insert_inferred_label(
+                                        &conn,
+                                        &decoded_image.timestamp,
+                                        &decoded_image.inferred_label[0],
+                                    ) {
                                         Ok(_) => println!("Inferred label data inserted."),
                                         Err(e) => {
                                             eprintln!("Failed to insert inferred data: {:?}", e)
