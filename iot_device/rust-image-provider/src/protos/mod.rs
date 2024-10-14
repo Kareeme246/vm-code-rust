@@ -16,5 +16,5 @@ include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 //     #![allow(unused_imports)]
 //     #![allow(unused_results)]
 //     #![allow(unused_mut)]
-//     
+//
 // }
