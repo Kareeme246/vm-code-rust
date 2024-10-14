@@ -1,4 +1,4 @@
-name: Rust CI
+name: Rust CI for Multiple Projects
 
 on:
   push:
@@ -7,6 +7,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        project:
+          - database/rust-database-consumer
+          - iot_device/rust-image-provider
+          - ml_model/rust-inference-consumer
 
     steps:
       - name: Checkout repository
@@ -19,14 +26,22 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+      - name: Navigate to project folder
+        working-directory: ${{ matrix.project }}
+        run: echo "Working directory set to ${{ matrix.project }}"
+
       - name: Check code formatting with rustfmt
+        working-directory: ${{ matrix.project }}
         run: cargo fmt -- --check
 
       - name: Run Clippy to check for warnings and errors
+        working-directory: ${{ matrix.project }}
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build the project
+        working-directory: ${{ matrix.project }}
         run: cargo build --verbose
 
       - name: Run unit tests
+        working-directory: ${{ matrix.project }}
         run: cargo test --verbose
