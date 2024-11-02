@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "database/rust-database-consumer",
+    "iot_device/rust-image-provider",
+    "ml_model/rust-inference-consumer",
+]
