@@ -84,7 +84,7 @@ fn main() -> io::Result<()> {
     let mut available_indices: Vec<usize> = (0..NUM_IMAGES).collect(); // Initialize with all indices
 
     // Main loop: select random images, process them
-    for _ in 0..10 {
+    for _ in 0..100 {
         if available_indices.is_empty() {
             // Chosen 10,000 elements
             available_indices = (0..NUM_IMAGES).collect(); // Initialize with all indices again for
@@ -117,7 +117,7 @@ fn main() -> io::Result<()> {
 
                 // Ensure all messages are sent before exiting
                 let _ = producer.flush(std::time::Duration::from_secs(1));
-                sleep(std::time::Duration::from_millis(100));
+                sleep(std::time::Duration::from_millis(500));
 
                 // Access the decoded fields for logging
                 // match decode_image_data(&encoded_data) {
