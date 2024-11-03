@@ -85,7 +85,6 @@ fn create_image_data(label: u8, image_data: Vec<u8>) -> protobuf::Result<Vec<u8>
     Ok(encoded_data)
 }
 
-
 /// Decodes a Protobuf-encoded image message back into an `Image` structure.
 ///
 /// # Arguments

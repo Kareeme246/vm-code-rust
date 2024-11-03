@@ -1,7 +1,7 @@
 //! # Rust Inference Consumer
 //!
 //! This module processes incoming image data from Kafka, performs model inference using TorchScript,
-//! and sends the inference results back to Kafka. It includes functions for data preprocessing, 
+//! and sends the inference results back to Kafka. It includes functions for data preprocessing,
 //! model loading, inference, and structured messaging.
 mod protos;
 use protobuf::Message;
