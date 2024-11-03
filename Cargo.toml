@@ -4,3 +4,4 @@ members = [
     "iot_device/rust-image-provider",
     "ml_model/rust-inference-consumer",
 ]
+resolver = "2"

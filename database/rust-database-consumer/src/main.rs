@@ -1,3 +1,7 @@
+//! # Rust Database Consumer
+//!
+//! This module receives image data and inferred labels from Kafka and stores them in an SQLite database.
+//! It supports both initial data insertion and updates with inference labels.
 mod protos;
 use protobuf::well_known_types::timestamp::Timestamp;
 use protobuf::Message;
@@ -9,6 +13,17 @@ use rusqlite::{params, Connection, Result};
 use std::env::args;
 use std::time::Duration;
 
+/// Creates a Kafka consumer for subscribing to a specific topic.
+///
+/// # Arguments
+///
+/// * `bootstrap_server` - Kafka bootstrap server address.
+/// * `group_id` - Consumer group ID for Kafka.
+/// * `topic` - Kafka topic to subscribe to.
+///
+/// # Returns
+///
+/// A configured `BaseConsumer` subscribed to the specified topic.
 fn create_consumer(bootstrap_server: &str, group_id: &str, topic: &str) -> BaseConsumer {
     let consumer: BaseConsumer = ClientConfig::new()
         .set("group.id", group_id)
@@ -23,11 +38,25 @@ fn create_consumer(bootstrap_server: &str, group_id: &str, topic: &str) -> BaseC
     consumer
 }
 
+/// Decodes a Protobuf-encoded image message received from Kafka.
+///
+/// # Arguments
+///
+/// * `encoded_data` - Byte slice containing Protobuf-encoded image data.
+///
+/// # Returns
+///
+/// A `Result` containing the decoded `Image` structure.
 fn decode_image_data(encoded_data: &[u8]) -> protobuf::Result<Image> {
     let image_proto = Image::parse_from_bytes(encoded_data)?;
     Ok(image_proto)
 }
 
+/// Connects to an SQLite database and creates an `images` table if it doesn't exist.
+///
+/// # Returns
+///
+/// A `Result` containing the database connection on success, or an error on failure.
 fn connect_to_database() -> Result<Connection> {
     let conn = Connection::open("rust_images.db")?;
     conn.execute(
@@ -42,6 +71,18 @@ fn connect_to_database() -> Result<Connection> {
     Ok(conn)
 }
 
+/// Inserts initial image data (without inference label) into the database.
+///
+/// # Arguments
+///
+/// * `conn` - Database connection.
+/// * `timestamp` - Timestamp of the image.
+/// * `orig_label` - Original label of the image.
+/// * `image_data` - Byte vector of the image data.
+///
+/// # Returns
+///
+/// A `Result` indicating success or failure.
 fn insert_initial_image_data(
     conn: &Connection,
     timestamp: &Timestamp,
@@ -59,6 +100,17 @@ fn insert_initial_image_data(
     Ok(())
 }
 
+/// Inserts or updates an inferred label in the database for an existing image entry.
+///
+/// # Arguments
+///
+/// * `conn` - Database connection.
+/// * `timestamp` - Timestamp of the image.
+/// * `inferred_label` - Inferred label of the image.
+///
+/// # Returns
+///
+/// A `Result` indicating success or failure.
 fn insert_inferred_label(
     conn: &Connection,
     timestamp: &Timestamp,

@@ -1,3 +1,8 @@
+//! # Rust Inference Consumer
+//!
+//! This module processes incoming image data from Kafka, performs model inference using TorchScript,
+//! and sends the inference results back to Kafka. It includes functions for data preprocessing, 
+//! model loading, inference, and structured messaging.
 mod protos;
 use protobuf::Message;
 use protos::image::Image;
@@ -10,7 +15,15 @@ use rdkafka::{
 };
 use tch::{CModule, Kind, Tensor};
 
-// Preprocess the image data received into a Tensor
+/// Preprocesses CIFAR-100 image data into a normalized `Tensor` for model inference.
+///
+/// # Arguments
+///
+/// * `image_data` - Byte vector of raw image data.
+///
+/// # Returns
+///
+/// A 4D Tensor normalized for input to the machine learning model.
 fn preprocess_image(image_data: Vec<u8>) -> Tensor {
     // Convert the image data to a tensor and normalize it
     let img_tensor = Tensor::from_slice(&image_data)
@@ -31,7 +44,16 @@ fn preprocess_image(image_data: Vec<u8>) -> Tensor {
     normalized_tensor.unsqueeze(0) // Shape: [1, 3, 32, 32]
 }
 
-// Function to create the Protobuf message with inferred label
+/// Encodes a Protobuf message with inferred label, along with metadata and image data.
+///
+/// # Arguments
+///
+/// * `original_image` - Original `Image` Protobuf message received from Kafka.
+/// * `inferred_label` - Inference label predicted by the model.
+///
+/// # Returns
+///
+/// A `Result` containing the Protobuf-encoded message with the added label.
 fn create_inferred_image(original_image: Image, inferred_label: u8) -> protobuf::Result<Vec<u8>> {
     let mut image_proto = Image::new();
 
@@ -47,12 +69,30 @@ fn create_inferred_image(original_image: Image, inferred_label: u8) -> protobuf:
     image_proto.write_to_bytes()
 }
 
-// Decode the Protobuf image data received from Kafka
+/// Decodes a Protobuf-encoded image message received from Kafka.
+///
+/// # Arguments
+///
+/// * `encoded_data` - Byte slice containing Protobuf-encoded image data.
+///
+/// # Returns
+///
+/// A `Result` containing the decoded `Image` structure.
 fn decode_image_data(encoded_data: &[u8]) -> protobuf::Result<Image> {
     Image::parse_from_bytes(encoded_data)
 }
 
-// Kafka Consumer setup
+/// Creates a Kafka consumer for subscribing to a specific topic.
+///
+/// # Arguments
+///
+/// * `bootstrap_server` - Kafka bootstrap server address.
+/// * `group_id` - Consumer group ID for Kafka.
+/// * `topic` - Kafka topic to subscribe to.
+///
+/// # Returns
+///
+/// A configured `BaseConsumer` subscribed to the specified topic.
 fn create_consumer(bootstrap_server: &str, group_id: &str, topic: &str) -> BaseConsumer {
     let consumer: BaseConsumer = ClientConfig::new()
         .set("group.id", group_id)
@@ -67,7 +107,15 @@ fn create_consumer(bootstrap_server: &str, group_id: &str, topic: &str) -> BaseC
     consumer
 }
 
-// Kafka Producer setup
+/// Creates a Kafka producer with the specified bootstrap server.
+///
+/// # Arguments
+///
+/// * `bootstrap_server` - Kafka bootstrap server address.
+///
+/// # Returns
+///
+/// A configured `BaseProducer` ready to send messages.
 fn create_producer(bootstrap_server: &str) -> BaseProducer {
     ClientConfig::new()
         .set("bootstrap.servers", bootstrap_server)

@@ -1,3 +1,8 @@
+//! # Rust Image Provider
+//!
+//! This module is responsible for loading, encoding, and sending CIFAR-100 images via Kafka.
+//! It reads raw image data, creates structured Protobuf messages, and transmits the data
+//! to a Kafka topic for downstream consumers.
 mod protos;
 use protobuf::well_known_types::timestamp::Timestamp;
 use protobuf::Message;
@@ -14,7 +19,15 @@ use std::thread::sleep;
 const RECORD_SIZE: usize = 3074; // 1 byte for coarse label + 1 byte for fine label + 3072 bytes for image
 const NUM_IMAGES: usize = 50_000; // 50,000 images in binary training file
 
-// Function to load the CIFAR-100 binary file
+/// Loads the entire CIFAR-100 dataset from a binary file and returns the contents as a `Vec<u8>`.
+///
+/// # Arguments
+///
+/// * `file_path` - Path to the CIFAR-100 binary file.
+///
+/// # Returns
+///
+/// A `Result` containing the file contents as a byte vector on success, or an error on failure.
 fn load_cifar_datafile(file_path: &str) -> io::Result<Vec<u8>> {
     let mut file = File::open(file_path)?;
     let mut buffer = Vec::new();
@@ -22,7 +35,16 @@ fn load_cifar_datafile(file_path: &str) -> io::Result<Vec<u8>> {
     Ok(buffer)
 }
 
-// Function to get a random image and label from the CIFAR-100 data
+/// Selects a random image and label from the CIFAR-100 data pool.
+///
+/// # Arguments
+///
+/// * `data` - CIFAR-100 dataset loaded as a byte array.
+/// * `available_indices` - List of indices representing unprocessed images.
+///
+/// # Returns
+///
+/// A tuple containing the index of the selected image, its label, and the image data itself.
 fn get_random_image(data: &[u8], available_indices: &[usize]) -> (usize, u8, Vec<u8>) {
     // Randomly select and remove an index from the available pool
     let removal_index = fastrand::usize(0..available_indices.len());
@@ -39,7 +61,16 @@ fn get_random_image(data: &[u8], available_indices: &[usize]) -> (usize, u8, Vec
     (removal_index, fine_label, image_data)
 }
 
-// Assuming the generated struct is available
+/// Creates a Protobuf-encoded image message with metadata and image content.
+///
+/// # Arguments
+///
+/// * `label` - The label of the image.
+/// * `image_data` - Byte vector of image data.
+///
+/// # Returns
+///
+/// A `Result` containing the encoded message as a byte vector on success, or an error on failure.
 fn create_image_data(label: u8, image_data: Vec<u8>) -> protobuf::Result<Vec<u8>> {
     // Create a new instance of the `Image` struct
     let mut image_proto = Image::new();
@@ -54,6 +85,16 @@ fn create_image_data(label: u8, image_data: Vec<u8>) -> protobuf::Result<Vec<u8>
     Ok(encoded_data)
 }
 
+
+/// Decodes a Protobuf-encoded image message back into an `Image` structure.
+///
+/// # Arguments
+///
+/// * `encoded_data` - Byte slice containing Protobuf-encoded image data.
+///
+/// # Returns
+///
+/// A `Result` with the decoded `Image` struct on success, or an error on failure.
 #[allow(dead_code)]
 fn decode_image_data(encoded_data: &[u8]) -> protobuf::Result<Image> {
     // Parse the Protobuf-encoded data into an Image struct
@@ -63,6 +104,15 @@ fn decode_image_data(encoded_data: &[u8]) -> protobuf::Result<Image> {
 }
 
 // https://www.arroyo.dev/blog/using-kafka-with-rust#what-is-kafka
+/// Creates a Kafka producer with the specified bootstrap server.
+///
+/// # Arguments
+///
+/// * `bootstrap_server` - Kafka bootstrap server address.
+///
+/// # Returns
+///
+/// A configured `BaseProducer` ready to send messages.
 fn create_producer(bootstrap_server: &str) -> BaseProducer {
     let producer: BaseProducer = ClientConfig::new()
         .set("bootstrap.servers", bootstrap_server)
