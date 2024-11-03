@@ -31,7 +31,7 @@ fn get_random_image(data: &[u8], available_indices: &[usize]) -> (usize, u8, Vec
     // Calculate the starting position of the record
     let start: usize = random_index * RECORD_SIZE;
 
-    let coarse_label: u8 = data[start]; // Coarse label (0-19)
+    let _coarse_label: u8 = data[start]; // Coarse label (0-19)
     let fine_label: u8 = data[start + 1]; // Fine label (0-99)
 
     let image_data = data[start + 2..start + RECORD_SIZE].to_vec(); // The next 3072 bytes are the image
@@ -54,6 +54,7 @@ fn create_image_data(label: u8, image_data: Vec<u8>) -> protobuf::Result<Vec<u8>
     Ok(encoded_data)
 }
 
+#[allow(dead_code)]
 fn decode_image_data(encoded_data: &[u8]) -> protobuf::Result<Image> {
     // Parse the Protobuf-encoded data into an Image struct
     let image_proto = Image::parse_from_bytes(encoded_data)?;

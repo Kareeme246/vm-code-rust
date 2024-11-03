@@ -1,3 +1,4 @@
+#[allow(clippy::needless_borrows_for_generic_args)]
 fn main() {
     // Use this in build.rs
     protobuf_codegen::Codegen::new()
