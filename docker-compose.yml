@@ -1,0 +1,61 @@
+services:
+  iot_device:
+    build:
+      # Context is root dir of docker-compose by default!
+      dockerfile: ./iot_device/rust-image-provider/Dockerfile
+    depends_on:
+      kafka_server:
+        condition: service_healthy
+        restart: true
+    networks:
+      - mynetwork
+
+  database:
+    build:
+      dockerfile: ./database/rust-database-consumer/Dockerfile
+    depends_on:
+      kafka_server:
+        condition: service_healthy
+        restart: true
+    networks:
+      - mynetwork
+
+  ml_model:
+    build:
+      dockerfile: ./ml_model/rust-inference-consumer/Dockerfile
+    depends_on:
+      kafka_server:
+        condition: service_healthy
+        restart: true
+    networks:
+      - mynetwork
+
+  kafka_server:
+    image: apache/kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_server:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 1
+    networks:
+      - mynetwork
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+networks:
+  mynetwork:
+    driver: bridge
