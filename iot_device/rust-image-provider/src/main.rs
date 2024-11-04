@@ -250,10 +250,7 @@ mod test {
             .create_topic(TOPIC, 32, 2)
             .expect("Failed to create topic");
 
-        let producer: BaseProducer = ClientConfig::new()
-            .set("bootstrap.servers", mock_cluster.bootstrap_servers())
-            .create()
-            .expect("Producer creation error");
+        let producer: BaseProducer = create_producer(&mock_cluster.bootstrap_servers());
 
         let image_data = vec![1u8; 3072];
         let record = BaseRecord::<(), _>::to("test_topic").payload(&image_data);
