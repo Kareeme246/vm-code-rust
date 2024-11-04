@@ -44,7 +44,13 @@ cargo doc -p rust-database-consumer --open
 git clone https://github.com/Kareeme246/vm-code-rust.git
 ```
 
-2. Build & Start all services:
+2. Download and extract the data file used by the image provider
+
+Run the following command in the root directory of the project
+```bash
+mkdir -p iot_device/rust-image-provider/data && curl -sL https://www.cs.toronto.edu/~kriz/cifar-100-binary.tar.gz | tar -xz -C iot_device/rust-image-provider/data
+```
+3. Build & Start all services:
 
 ```bash
 docker compose up
