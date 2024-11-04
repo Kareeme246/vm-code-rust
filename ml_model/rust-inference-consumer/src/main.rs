@@ -204,3 +204,79 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use protobuf::well_known_types::timestamp::Timestamp;
+    use protobuf::Message;
+    use protos::image::Image;
+
+    #[test]
+    fn test_preprocess_image() {
+        let image_data = vec![128u8; 3 * 32 * 32]; // Mock image data for testing
+        let tensor = preprocess_image(image_data);
+
+        // Check the tensor shape is as expected
+        assert_eq!(tensor.size(), vec![1, 3, 32, 32]);
+    }
+
+    #[test]
+    fn test_create_inferred_image() {
+        let mut original_image = Image::new();
+        original_image.timestamp = protobuf::MessageField::some(Timestamp {
+            seconds: 1_000_000,
+            nanos: 0,
+            ..Default::default()
+        });
+        original_image.original_label = vec![3];
+        original_image.image_data = vec![128u8; 3 * 32 * 32];
+        let inferred_label = 42;
+
+        let encoded_message =
+            create_inferred_image(original_image.clone(), inferred_label).unwrap();
+        let decoded_image = Image::parse_from_bytes(&encoded_message).unwrap();
+
+        assert_eq!(decoded_image.timestamp, original_image.timestamp);
+        assert_eq!(decoded_image.original_label, original_image.original_label);
+        assert_eq!(decoded_image.image_data, original_image.image_data);
+        assert_eq!(decoded_image.inferred_label, vec![inferred_label]);
+    }
+
+    #[test]
+    fn test_decode_image_data() {
+        let mut original_image = Image::new();
+        original_image.timestamp = protobuf::MessageField::some(Timestamp {
+            seconds: 1_000_000,
+            nanos: 0,
+            ..Default::default()
+        });
+        original_image.original_label = vec![3];
+        original_image.image_data = vec![128u8; 3 * 32 * 32];
+
+        let encoded_data = original_image.write_to_bytes().unwrap();
+        let decoded_image = decode_image_data(&encoded_data).unwrap();
+
+        assert_eq!(decoded_image.timestamp, original_image.timestamp);
+        assert_eq!(decoded_image.original_label, original_image.original_label);
+        assert_eq!(decoded_image.image_data, original_image.image_data);
+    }
+
+    #[test]
+    fn test_kafka_producer() {
+        const TOPIC: &str = "test_topic";
+        let mock_cluster = rdkafka::mocking::MockCluster::new(1).unwrap();
+        mock_cluster
+            .create_topic(TOPIC, 32, 2)
+            .expect("Failed to create topic");
+
+        let producer: BaseProducer = create_producer(&mock_cluster.bootstrap_servers());
+
+        let image_data = vec![1u8; 3072];
+        let record = BaseRecord::<(), _>::to("test_topic").payload(&image_data);
+
+        let send_result = producer.send(record);
+
+        assert!(send_result.is_ok());
+    }
+}
