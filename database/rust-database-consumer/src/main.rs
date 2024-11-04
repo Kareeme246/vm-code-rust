@@ -133,7 +133,6 @@ fn main() {
     let image_initial_consumer = create_consumer(bootstrap_server, "db_group", "image_initial");
     let image_inference_consumer = create_consumer(bootstrap_server, "db_group", "image_inference");
 
-
     let db_path = "rust_images.db";
     match connect_to_database(db_path) {
         Ok(conn) => {
