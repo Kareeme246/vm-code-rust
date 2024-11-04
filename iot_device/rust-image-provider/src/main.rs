@@ -143,13 +143,6 @@ fn main() -> io::Result<()> {
         let (idx, label, image_data) = get_random_image(&data, &available_indices);
         available_indices.swap_remove(idx);
 
-        // Image processing (placeholder)
-        // Reshape the flat image (prep for blur)
-
-        // Blur Image
-
-        // Flatten image (prep for serialization)
-
         // Encode image via profobuf
         match create_image_data(label, image_data) {
             Ok(encoded_data) => {
@@ -191,4 +184,82 @@ fn main() -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_loading_data() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("cifar-100-binary");
+
+        let mut file = File::create(&file_path).unwrap();
+
+        // Write mock CIFAR-100 data
+        let fake_data: Vec<u8> = vec![0; RECORD_SIZE * 10];
+        io::Write::write_all(&mut file, &fake_data).unwrap();
+
+        // Load data
+        let result = load_cifar_datafile(file_path.to_str().unwrap());
+        assert!(result.is_ok());
+        let data = result.unwrap();
+        assert_eq!(data.len(), RECORD_SIZE * 10);
+    }
+
+    #[test]
+    fn test_get_random_image() {
+        // Create mock data for CIFAR-100
+        let data = vec![0u8; RECORD_SIZE * 10];
+        let available_indices: Vec<usize> = (0..10).collect();
+
+        let (removal_index, label, image_data) = get_random_image(&data, &available_indices);
+
+        // Check if the returned index is within the range of available indices
+        assert!(removal_index < available_indices.len());
+
+        assert_eq!(label, 0);
+
+        assert_eq!(image_data.len(), 3072);
+    }
+
+    #[test]
+    fn test_create_image_data() {
+        let image_data = vec![1u8; 3072];
+        let label: u8 = 5;
+
+        let result = create_image_data(label, image_data.clone());
+        assert!(result.is_ok());
+        let encoded_data = result.unwrap();
+
+        let decoded_result = decode_image_data(&encoded_data);
+        assert!(decoded_result.is_ok());
+        let decoded_image = decoded_result.unwrap();
+
+        // Validate decoded fields
+        assert_eq!(decoded_image.original_label, vec![label]);
+        assert_eq!(decoded_image.image_data, image_data);
+    }
+
+    #[test]
+    fn test_kafka_producer() {
+        const TOPIC: &str = "test_topic";
+        let mock_cluster = rdkafka::mocking::MockCluster::new(1).unwrap();
+        mock_cluster
+            .create_topic(TOPIC, 32, 2)
+            .expect("Failed to create topic");
+
+        let producer: BaseProducer = ClientConfig::new()
+            .set("bootstrap.servers", mock_cluster.bootstrap_servers())
+            .create()
+            .expect("Producer creation error");
+
+        let image_data = vec![1u8; 3072];
+        let record = BaseRecord::<(), _>::to("test_topic").payload(&image_data);
+
+        let send_result = producer.send(record);
+
+        assert!(send_result.is_ok());
+    }
 }

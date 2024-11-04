@@ -10,3 +10,6 @@ rdkafka = "0.36.2"
 
 [build-dependencies]
 protobuf-codegen = "3.5.1"
+
+[dev-dependencies]
+tempfile = "3.3" # or the latest version
