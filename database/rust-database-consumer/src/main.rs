@@ -57,8 +57,8 @@ fn decode_image_data(encoded_data: &[u8]) -> protobuf::Result<Image> {
 /// # Returns
 ///
 /// A `Result` containing the database connection on success, or an error on failure.
-fn connect_to_database() -> Result<Connection> {
-    let conn = Connection::open("rust_images.db")?;
+fn connect_to_database(db_path: &str) -> Result<Connection> {
+    let conn = Connection::open(db_path)?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS images (
             timestamp REAL PRIMARY KEY,
@@ -133,7 +133,9 @@ fn main() {
     let image_initial_consumer = create_consumer(bootstrap_server, "db_group", "image_initial");
     let image_inference_consumer = create_consumer(bootstrap_server, "db_group", "image_inference");
 
-    match connect_to_database() {
+
+    let db_path = "rust_images.db";
+    match connect_to_database(db_path) {
         Ok(conn) => {
             // Main loop: poll both consumers and insert data into the database on payload received
             loop {
@@ -197,5 +199,129 @@ fn main() {
             }
         }
         Err(e) => println!("Failed to connect to database: {:?}", e),
+    }
+}
+
+#[cfg(test)]
+
+mod tests {
+    use super::*;
+    use protobuf::well_known_types::timestamp::Timestamp;
+    use protos::image::Image;
+    use rusqlite::Connection;
+    use std::fs;
+
+    fn setup_database() -> Connection {
+        let conn = Connection::open_in_memory().expect("Failed to open database");
+        conn.execute(
+            "CREATE TABLE images (
+                timestamp REAL PRIMARY KEY,
+                orig_label INTEGER,
+                inferred_label INTEGER,
+                image_data BLOB
+            )",
+            [],
+        )
+        .expect("Failed to create table");
+        conn
+    }
+
+    #[test]
+    fn test_insert_initial_image_data() {
+        let conn = setup_database();
+        let timestamp = Timestamp {
+            seconds: 1_000_000,
+            nanos: 0,
+            ..Default::default()
+        };
+        let orig_label = 5;
+        let image_data = vec![1, 2, 3, 4, 5];
+
+        let result = insert_initial_image_data(&conn, &timestamp, &orig_label, image_data.clone());
+        assert!(result.is_ok());
+
+        let mut stmt = conn
+            .prepare("SELECT * FROM images WHERE timestamp = ?1")
+            .unwrap();
+        let mut rows = stmt.query(params![1_000_000.0]).unwrap();
+        if let Some(row) = rows.next().unwrap() {
+            let retrieved_label: u8 = row.get(1).unwrap();
+            let retrieved_data: Vec<u8> = row.get(3).unwrap();
+            assert_eq!(retrieved_label, orig_label);
+            assert_eq!(retrieved_data, image_data);
+        } else {
+            panic!("No data found");
+        }
+    }
+
+    #[test]
+    fn test_insert_inferred_label() {
+        let conn = setup_database();
+        let timestamp = Timestamp {
+            seconds: 1_000_000,
+            nanos: 0,
+            ..Default::default()
+        };
+        let orig_label = 5;
+        let inferred_label = 9;
+        let image_data = vec![1, 2, 3, 4, 5];
+
+        // First, insert initial image data
+        insert_initial_image_data(&conn, &timestamp, &orig_label, image_data).unwrap();
+
+        // Then, insert inferred label
+        let result = insert_inferred_label(&conn, &timestamp, &inferred_label);
+        assert!(result.is_ok());
+
+        let mut stmt = conn
+            .prepare("SELECT * FROM images WHERE timestamp = ?1")
+            .unwrap();
+        let mut rows = stmt.query(params![1_000_000.0]).unwrap();
+        if let Some(row) = rows.next().unwrap() {
+            let retrieved_inferred_label: u8 = row.get(2).unwrap();
+            assert_eq!(retrieved_inferred_label, inferred_label);
+        } else {
+            panic!("No data found");
+        }
+    }
+
+    #[test]
+    fn test_decode_image_data() {
+        let mut image = Image::new();
+        image.timestamp = protobuf::MessageField::some(Timestamp {
+            seconds: 1_000_000,
+            nanos: 0,
+            ..Default::default()
+        });
+        image.original_label = vec![5];
+        image.image_data = vec![1, 2, 3, 4, 5];
+
+        let encoded_data = image.write_to_bytes().unwrap();
+        let decoded_image = decode_image_data(&encoded_data).unwrap();
+
+        assert_eq!(decoded_image.timestamp.seconds, 1_000_000);
+        assert_eq!(decoded_image.original_label[0], 5);
+        assert_eq!(decoded_image.image_data, &[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_connect_to_database() {
+        let db_path = "test_rust_images.db";
+        let conn = connect_to_database(db_path).expect("Failed to connect to database");
+
+        // Set up the table if it doesn't already exist
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS images (id INTEGER PRIMARY KEY, data BLOB NOT NULL)",
+            [],
+        )
+        .expect("Failed to create images table");
+
+        // Check if we can select from the images table
+        let result = conn.execute("SELECT 1 FROM images LIMIT 1", []);
+        assert!(result.is_ok(), "Query failed: {:?}", result.err());
+
+        // Clean up the test database file
+        fs::remove_file(db_path)
+            .unwrap_or_else(|_| panic!("Failed to delete test database file: {}", db_path));
     }
 }
