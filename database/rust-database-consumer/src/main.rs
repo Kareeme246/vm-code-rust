@@ -10,7 +10,6 @@ use rdkafka::consumer::{BaseConsumer, Consumer};
 use rdkafka::message::Message as KafkaMessage;
 use rdkafka::ClientConfig;
 use rusqlite::{params, Connection, Result};
-use std::env::args;
 use std::time::Duration;
 
 /// Creates a Kafka consumer for subscribing to a specific topic.
@@ -128,8 +127,11 @@ fn insert_inferred_label(
 }
 
 fn main() {
-    // Create Kafka consumers for both topics
-    let bootstrap_server = &args().nth(1).unwrap_or("localhost:9092".to_string());
+    // Get Kafka bootstrap server from command-line argument, environment variable, or default
+    let bootstrap_server = &std::env::args()
+        .nth(1)
+        .or_else(|| std::env::var("KAFKA_BOOTSTRAP_SERVER").ok())
+        .unwrap_or_else(|| "localhost:9092".to_string());
     let image_initial_consumer = create_consumer(bootstrap_server, "db_group", "image_initial");
     let image_inference_consumer = create_consumer(bootstrap_server, "db_group", "image_inference");
 

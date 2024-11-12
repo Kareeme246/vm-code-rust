@@ -139,10 +139,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // Create Kafka consumer and producer
+    // Get Kafka bootstrap server from command-line argument, environment variable, or default
     let bootstrap_server = &std::env::args()
         .nth(1)
-        .unwrap_or("localhost:9092".to_string());
+        .or_else(|| std::env::var("KAFKA_BOOTSTRAP_SERVER").ok())
+        .unwrap_or_else(|| "localhost:9092".to_string());
     let image_initial_consumer = create_consumer(bootstrap_server, "ml_group", "image_initial");
     let inference_producer = create_producer(bootstrap_server);
 

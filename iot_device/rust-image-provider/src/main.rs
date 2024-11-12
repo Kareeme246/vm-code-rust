@@ -126,8 +126,12 @@ fn main() -> io::Result<()> {
     let file_path = "data/cifar-100-binary/train.bin";
     let data = load_cifar_datafile(file_path)?;
 
-    // Creates a producer, reading the bootstrap server from the first command-line argument or defaulting to localhost:9092
-    let producer = create_producer(&args().nth(1).unwrap_or("localhost:9092".to_string()));
+    // Get Kafka bootstrap server from command-line argument, environment variable, or default
+    let bootstrap_server = &std::env::args()
+        .nth(1)
+        .or_else(|| std::env::var("KAFKA_BOOTSTRAP_SERVER").ok())
+        .unwrap_or_else(|| "localhost:9092".to_string());
+    let producer = create_producer(bootstrap_server);
 
     fastrand::seed(1);
     let mut available_indices: Vec<usize> = (0..NUM_IMAGES).collect(); // Initialize with all indices
