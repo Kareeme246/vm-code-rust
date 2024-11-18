@@ -9,7 +9,6 @@ use protobuf::Message;
 use protos::image::Image;
 use rdkafka::producer::{BaseProducer, BaseRecord, Producer};
 use rdkafka::ClientConfig;
-use std::env::args;
 use std::fs::File;
 use std::io::{self, Read};
 use std::thread::sleep;
