@@ -19,6 +19,9 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+      - name: Ensure dependencies exist
+        run: sudo apt-get install libsqlite3-dev
+
       - name: Check code formatting with rustfmt
         run: cargo fmt -- --check
 
