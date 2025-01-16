@@ -204,7 +204,6 @@ fn main() {
 }
 
 #[cfg(test)]
-
 mod tests {
     use super::*;
     use protobuf::well_known_types::timestamp::Timestamp;
