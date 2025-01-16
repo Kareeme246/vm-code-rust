@@ -2,6 +2,8 @@
 
 ## Rust Image Processing and Inference Pipeline
 
+![Screenshot 2025-01-15 at 10 25 53 PM](https://github.com/user-attachments/assets/d24e5af2-4c57-4138-b02a-7918c59f6068)
+
 ### Overview
 
 This project provides a complete pipeline for loading, processing, and transmitting image data from the CIFAR-100 dataset through Kafka to perform inference and store results in a database. The pipeline consists of three main Rust modules:
